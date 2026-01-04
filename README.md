@@ -271,7 +271,7 @@ and then progressively adapt to more challenging terrains.
 
 ## 📐 Reward Formulation (Mathematical Description)
 
-The total reward at time step $ t $ is defined as a weighted sum of individual reward and penalty terms:
+The total reward at time step $t$ is defined as a weighted sum of individual reward and penalty terms:
 
 $$
 r_t = \sum_i w_i \, r_i(t)
