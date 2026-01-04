@@ -30,13 +30,10 @@ Clone this repository and set up the environment:
 ```bash
 git clone https://github.com/DoD0d0/IsaacLab_Dodo.git
 cd IsaacLab_Dodo
-./isaaclab.sh --conda
-./isaaclab.sh --install
-```
-
-Activate the environment:
-```bash
-conda activate env_isaaclab  # Use your chosen env name if you passed one
+conda create -n isaaclab python=3.10
+conda activate isaalab
+pip install --upgrade pip
+./isaaclab.sh --install rsl_rl
 ```
 
 All commands below assume execution from the `IsaacLab_Dodo` root directory.
