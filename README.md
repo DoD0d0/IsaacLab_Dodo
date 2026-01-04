@@ -236,9 +236,9 @@ Reward weights differ slightly between flat and rough terrain variants.
 
 Velocity tracking rewards are implemented using exponential functions:
 
-\[
+$$
 r = \exp\left(-\frac{\| e \|^2}{\sigma^2}\right)
-\]
+$$
 
 This formulation provides:
 - Smooth gradients near zero error
@@ -271,13 +271,13 @@ and then progressively adapt to more challenging terrains.
 
 ## 📐 Reward Formulation (Mathematical Description)
 
-The total reward at time step \( t \) is defined as a weighted sum of individual reward and penalty terms:
+The total reward at time step $ t $ is defined as a weighted sum of individual reward and penalty terms:
 
-\[
+$$
 r_t = \sum_i w_i \, r_i(t)
-\]
+$$
 
-where \( r_i(t) \) denotes each reward component and \( w_i \) its corresponding weight.
+where $ r_i(t) $ denotes each reward component and $ w_i $ its corresponding weight.
 
 ---
 
@@ -286,16 +286,16 @@ where \( r_i(t) \) denotes each reward component and \( w_i \) its corresponding
 **Linear velocity tracking (XY)**  
 Encourages the robot to match the commanded planar velocity:
 
-\[
+$$
 r_{\text{lin}} = \exp\left(-\frac{\| \mathbf{v}_{xy} - \mathbf{v}_{xy}^{\text{cmd}} \|^2}{\sigma_{\text{lin}}^2}\right)
-\]
+$$
 
 **Angular velocity tracking (Z)**  
 Encourages accurate yaw rate tracking:
 
-\[
+$$
 r_{\text{ang}} = \exp\left(-\frac{(\omega_z - \omega_z^{\text{cmd}})^2}{\sigma_{\text{ang}}^2}\right)
-\]
+$$
 
 ---
 
@@ -304,13 +304,13 @@ r_{\text{ang}} = \exp\left(-\frac{(\omega_z - \omega_z^{\text{cmd}})^2}{\sigma_{
 **Foot air-time reward**  
 Encourages alternating stepping patterns:
 
-\[
+$$
 r_{\text{air}} =
 \begin{cases}
 \alpha \cdot t_{\text{air}}, & \text{if } v_x^{\text{cmd}} > v_{\text{th}} \\
 0, & \text{otherwise}
 \end{cases}
-\]
+$$
 
 This term promotes dynamic walking while suppressing unnecessary hopping when the commanded velocity is low.
 
@@ -319,29 +319,29 @@ This term promotes dynamic walking while suppressing unnecessary hopping when th
 ### Stability & Smoothness Penalties
 
 **Vertical velocity penalty**
-\[
+$$
 r_{v_z} = -\| v_z \|^2
-\]
+$$
 
 **Angular velocity penalty (roll/pitch)**
-\[
+$$
 r_{\omega_{xy}} = -\| \boldsymbol{\omega}_{xy} \|^2
-\]
+$$
 
 **Joint torque penalty**
-\[
+$$
 r_{\tau} = -\| \boldsymbol{\tau} \|^2
-\]
+$$
 
 **Joint acceleration penalty**
-\[
+$$
 r_{\ddot{q}} = -\| \ddot{\mathbf{q}} \|^2
-\]
+$$
 
 **Action rate penalty**
-\[
+$$
 r_{\Delta a} = -\| \mathbf{a}_t - \mathbf{a}_{t-1} \|^2
-\]
+$$
 
 ---
 
@@ -349,13 +349,13 @@ r_{\Delta a} = -\| \mathbf{a}_t - \mathbf{a}_{t-1} \|^2
 
 A large negative reward is applied when an episode terminates early:
 
-\[
+$$
 r_{\text{term}} =
 \begin{cases}
 -200, & \text{if episode terminates} \\
 0, & \text{otherwise}
 \end{cases}
-\]
+$$
 
 This discourages unstable behaviors that lead to falls or illegal contacts.
 
