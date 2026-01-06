@@ -7,7 +7,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 
 @configclass
 class DodoRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 24
+    num_steps_per_env = 96  # original: 24
     max_iterations = 3000
     save_interval = 50
     experiment_name = "Dodo_rough"

@@ -86,6 +86,8 @@ class DodoRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
+        # avoid PhysX fabric interface mismatch for this minimal setup
+        self.sim.use_fabric = False
         # Scene
         self.scene.robot = _resolve_robot_cfg().replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/body_link"
