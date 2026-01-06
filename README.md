@@ -33,7 +33,11 @@ cd IsaacLab_Dodo
 conda create -n isaaclab python=3.10
 conda activate isaalab
 pip install --upgrade pip
+pip install "isaacsim[all,extscache]==4.5.0.0" --extra-index-url https://pypi.nvidia.com
+pip install -U torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
+sudo apt install cmake build-essential
 ./isaaclab.sh --install rsl_rl
+pip install wandb
 ```
 
 All commands below assume execution from the `IsaacLab_Dodo` root directory.
