@@ -291,6 +291,7 @@ class CurriculumCfg:
     """Curriculum terms for the MDP."""
 
     terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+    lin_vel_x: CurrTerm | None = None
 
 
 ##

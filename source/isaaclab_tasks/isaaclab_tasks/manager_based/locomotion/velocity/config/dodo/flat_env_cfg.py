@@ -1,7 +1,10 @@
 # Configuration for Dodo robot in flat environment for velocity locomotion task. - YOU-RI
 
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
+
+import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 
 from .rough_env_cfg import DodoRoughEnvCfg
 
@@ -20,6 +23,19 @@ class DodoFlatEnvCfg(DodoRoughEnvCfg):
         self.observations.policy.height_scan = None
         # no terrain curriculum
         self.curriculum.terrain_levels = None
+        # velocity command curriculum (ramp lin_vel_x range)
+        self.curriculum.lin_vel_x = CurrTerm(
+            func=mdp.lin_vel_x_range,
+            params={
+                "command_name": "base_velocity",
+                "min_start": 0.2,
+                "min_end": 0.4,
+                "max_start": 0.8,
+                "max_end": 1.2,
+                "start_step": 0,
+                "end_step": 1_500_000,
+            },
+        )
 
         # ===========================================================================
 
@@ -63,7 +79,7 @@ class DodoFlatEnvCfg(DodoRoughEnvCfg):
             "robot", joint_names=["left_joint_.*", "right_joint_.*"]
         )
         # Commands (velocity targets)
-        self.commands.base_velocity.ranges.lin_vel_x = (0.4, 1.0)  # forward speed range
+        self.commands.base_velocity.ranges.lin_vel_x = (0.2, 0.8)  # forward speed range
         self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)  # lateral speed range
         self.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)  # yaw rate range
         self.commands.base_velocity.rel_standing_envs = 0.0  # standstill probability
