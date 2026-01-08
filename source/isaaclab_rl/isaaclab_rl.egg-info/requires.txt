@@ -9,10 +9,10 @@ moviepy
 pillow==11.0.0
 
 [all]
-skrl>=1.4.2
 gym
-rsl-rl-lib==2.3.3
 stable-baselines3>=2.1
+rsl-rl-lib==2.3.3
+skrl>=1.4.2
 rl-games==1.6.1
 
 [rl-games]
