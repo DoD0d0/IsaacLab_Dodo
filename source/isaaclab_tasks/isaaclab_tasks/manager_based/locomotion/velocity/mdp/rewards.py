@@ -83,6 +83,17 @@ def feet_slide(env, sensor_cfg: SceneEntityCfg, asset_cfg: SceneEntityCfg = Scen
     return reward
 
 
+def track_base_height_exp(
+    env, command_name: str, std: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Reward tracking of commanded base height in world frame using exponential kernel."""
+    asset = env.scene[asset_cfg.name]
+    command_term = env.command_manager.get_term(command_name)
+    target_height = command_term.target_height_w
+    height_error = torch.square(asset.data.root_pos_w[:, 2] - target_height)
+    return torch.exp(-height_error / std**2)
+
+
 def track_lin_vel_xy_yaw_frame_exp(
     env, std: float, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:

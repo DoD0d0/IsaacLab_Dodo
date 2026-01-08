@@ -79,3 +79,29 @@ def lin_vel_x_range(
     cmd = env.command_manager.get_term(command_name)
     cmd.cfg.ranges.lin_vel_x = (min_vel, max_vel)
     return max_vel
+
+
+def height_command_range(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    command_name: str,
+    min_start: float,
+    min_end: float,
+    max_start: float,
+    max_end: float,
+    start_step: int,
+    end_step: int,
+) -> float:
+    """Linearly ramp the commanded height range over training steps."""
+    if end_step <= start_step:
+        progress = 1.0
+    else:
+        progress = (env.common_step_counter - start_step) / float(end_step - start_step)
+        progress = max(0.0, min(1.0, progress))
+
+    min_height = min_start + (min_end - min_start) * progress
+    max_height = max_start + (max_end - max_start) * progress
+
+    cmd = env.command_manager.get_term(command_name)
+    cmd.cfg.ranges.height = (min_height, max_height)
+    return max_height
