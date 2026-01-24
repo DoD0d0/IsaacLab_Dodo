@@ -71,7 +71,7 @@ class RayCaster(SensorBase):
         # Create empty variables for storing output data
         self._data = RayCasterData()
         # the warp meshes used for raycasting.
-        self.meshes: dict[str, wp.Mesh] = {}
+        self.meshes: list[wp.Mesh] = []
 
     def __str__(self) -> str:
         """Returns: A string containing information about the instance."""
@@ -149,54 +149,74 @@ class RayCaster(SensorBase):
         self._initialize_rays_impl()
 
     def _initialize_warp_meshes(self):
-        # check number of mesh prims provided
-        if len(self.cfg.mesh_prim_paths) != 1:
-            raise NotImplementedError(
-                f"RayCaster currently only supports one mesh prim. Received: {len(self.cfg.mesh_prim_paths)}"
-            )
-
         # read prims to ray-cast
         for mesh_prim_path in self.cfg.mesh_prim_paths:
-            # check if the prim is a plane - handle PhysX plane as a special case
-            # if a plane exists then we need to create an infinite mesh that is a plane
-            mesh_prim = sim_utils.get_first_matching_child_prim(
-                mesh_prim_path, lambda prim: prim.GetTypeName() == "Plane"
-            )
-            # if we did not find a plane then we need to read the mesh
-            if mesh_prim is None:
-                # obtain the mesh prim
-                mesh_prim = sim_utils.get_first_matching_child_prim(
-                    mesh_prim_path, lambda prim: prim.GetTypeName() == "Mesh"
-                )
-                # check if valid
-                if mesh_prim is None or not mesh_prim.IsValid():
-                    raise RuntimeError(f"Invalid mesh prim path: {mesh_prim_path}")
-                # cast into UsdGeomMesh
-                mesh_prim = UsdGeom.Mesh(mesh_prim)
-                # read the vertices and faces
-                points = np.asarray(mesh_prim.GetPointsAttr().Get())
-                transform_matrix = np.array(omni.usd.get_world_transform_matrix(mesh_prim)).T
-                points = np.matmul(points, transform_matrix[:3, :3].T)
-                points += transform_matrix[:3, 3]
-                indices = np.asarray(mesh_prim.GetFaceVertexIndicesAttr().Get())
-                wp_mesh = convert_to_warp_mesh(points, indices, device=self.device)
-                # print info
-                omni.log.info(
-                    f"Read mesh prim: {mesh_prim.GetPath()} with {len(points)} vertices and {len(indices)} faces."
-                )
-            else:
-                mesh = make_plane(size=(2e6, 2e6), height=0.0, center_zero=True)
-                wp_mesh = convert_to_warp_mesh(mesh.vertices, mesh.faces, device=self.device)
-                # print info
-                omni.log.info(f"Created infinite plane mesh prim: {mesh_prim.GetPath()}.")
-            # add the warp mesh to the list
-            self.meshes[mesh_prim_path] = wp_mesh
+            matching_roots = sim_utils.find_matching_prims(mesh_prim_path)
+            if not matching_roots:
+                raise RuntimeError(f"Invalid mesh prim path: {mesh_prim_path}")
 
-        # throw an error if no meshes are found
-        if all([mesh_prim_path not in self.meshes for mesh_prim_path in self.cfg.mesh_prim_paths]):
-            raise RuntimeError(
-                f"No meshes found for ray-casting! Please check the mesh prim paths: {self.cfg.mesh_prim_paths}"
+            all_points = []
+            all_indices = []
+            vertex_offset = 0
+            plane_count = 0
+            mesh_count = 0
+
+            for root_prim in matching_roots:
+                root_path = root_prim.GetPath().pathString
+                plane_prims = sim_utils.get_all_matching_child_prims(
+                    root_path, lambda prim: prim.GetTypeName() == "Plane"
+                )
+                if plane_prims:
+                    plane_count += len(plane_prims)
+                    plane = make_plane(size=(2e6, 2e6), height=0.0, center_zero=True)
+                    plane_indices = plane.faces + vertex_offset
+                    all_points.append(plane.vertices)
+                    all_indices.append(plane_indices)
+                    vertex_offset += len(plane.vertices)
+
+                mesh_prims = sim_utils.get_all_matching_child_prims(
+                    root_path, lambda prim: prim.GetTypeName() == "Mesh"
+                )
+                for mesh_prim in mesh_prims:
+                    mesh_geom = UsdGeom.Mesh(mesh_prim)
+                    points = np.asarray(mesh_geom.GetPointsAttr().Get())
+                    transform_matrix = np.array(omni.usd.get_world_transform_matrix(mesh_geom)).T
+                    points = np.matmul(points, transform_matrix[:3, :3].T)
+                    points += transform_matrix[:3, 3]
+                    indices = np.asarray(mesh_geom.GetFaceVertexIndicesAttr().Get())
+                    counts = np.asarray(mesh_geom.GetFaceVertexCountsAttr().Get())
+                    if counts.size > 0 and not np.all(counts == 3):
+                        # fan triangulation for non-triangular faces
+                        tri_indices = []
+                        idx = 0
+                        for count in counts:
+                            face = indices[idx : idx + count]
+                            idx += count
+                            for i in range(1, count - 1):
+                                tri_indices.append([face[0], face[i], face[i + 1]])
+                        indices = np.asarray(tri_indices, dtype=np.int32)
+                    else:
+                        indices = indices.reshape(-1, 3)
+                    all_points.append(points)
+                    all_indices.append(indices + vertex_offset)
+                    vertex_offset += len(points)
+                    mesh_count += 1
+
+            if not all_points:
+                raise RuntimeError(f"No meshes found for ray-casting at: {mesh_prim_path}")
+
+            merged_points = np.concatenate(all_points, axis=0)
+            merged_indices = np.concatenate(all_indices, axis=0)
+            wp_mesh = convert_to_warp_mesh(merged_points, merged_indices, device=self.device)
+            self.meshes.append(wp_mesh)
+            omni.log.info(
+                f"Read mesh prims for ray-casting at '{mesh_prim_path}': "
+                f"{mesh_count} meshes, {plane_count} planes, "
+                f"{len(merged_points)} vertices, {len(merged_indices)} faces."
             )
+
+        if not self.meshes:
+            raise RuntimeError("No meshes found for ray-casting. Check mesh prim paths.")
 
     def _initialize_rays_impl(self):
         # compute ray stars and directions
@@ -250,14 +270,26 @@ class RayCaster(SensorBase):
             ray_starts_w = quat_apply(quat_w.repeat(1, self.num_rays), self.ray_starts[env_ids])
             ray_starts_w += pos_w.unsqueeze(1)
             ray_directions_w = quat_apply(quat_w.repeat(1, self.num_rays), self.ray_directions[env_ids])
-        # ray cast and store the hits
-        # TODO: Make this work for multiple meshes?
-        self._data.ray_hits_w[env_ids] = raycast_mesh(
-            ray_starts_w,
-            ray_directions_w,
-            max_dist=self.cfg.max_distance,
-            mesh=self.meshes[self.cfg.mesh_prim_paths[0]],
-        )[0]
+        # ray cast and store the hits (closest hit across all meshes)
+        best_hits = None
+        best_dist = None
+        for mesh in self.meshes:
+            ray_hits, ray_dist, _, _ = raycast_mesh(
+                ray_starts_w,
+                ray_directions_w,
+                max_dist=self.cfg.max_distance,
+                mesh=mesh,
+                return_distance=True,
+            )
+            if best_dist is None:
+                best_hits = ray_hits
+                best_dist = ray_dist
+            else:
+                use_new = ray_dist < best_dist
+                best_dist = torch.where(use_new, ray_dist, best_dist)
+                best_hits = torch.where(use_new.unsqueeze(-1), ray_hits, best_hits)
+
+        self._data.ray_hits_w[env_ids] = best_hits
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         # set visibility of markers
