@@ -66,8 +66,8 @@ def get_dodo_cfg(usd_path: str | None = None) -> ArticulationCfg:
         actuators={
             "legs": ImplicitActuatorCfg(
                 joint_names_expr=["left_joint_.*", "right_joint_.*"],
-                stiffness=40.0,
-                damping=2.0,
+                stiffness=80.0, # Nm/rad, original: 40.0
+                damping=4.0,  # Nms/rad, original: 2.0
             )
         },
     )
