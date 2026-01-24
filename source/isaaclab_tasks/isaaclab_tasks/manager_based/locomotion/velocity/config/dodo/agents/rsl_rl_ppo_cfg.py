@@ -47,8 +47,8 @@ class DodoFlatPPORunnerCfg(DodoRoughPPORunnerCfg):
 
 @configclass
 class DodoJumpPPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 128
-    max_iterations = 2500
+    num_steps_per_env = 128  # rollout length per env
+    max_iterations = 1500 # iterations for jump task
     save_interval = 50
     experiment_name = "dodo_jump"
     empirical_normalization = False

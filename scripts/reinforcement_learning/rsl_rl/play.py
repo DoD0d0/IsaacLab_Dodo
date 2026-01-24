@@ -24,6 +24,12 @@ parser.add_argument(
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument(
+    "--box_top_height",
+    type=float,
+    default=None,
+    help="Override box top height for play (disables box height curriculum).",
+)
+parser.add_argument(
     "--use_pretrained_checkpoint",
     action="store_true",
     help="Use the pre-trained checkpoint from Nucleus.",
@@ -71,6 +77,12 @@ def main():
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
+    if args_cli.box_top_height is not None:
+        if hasattr(env_cfg, "curriculum") and getattr(env_cfg.curriculum, "box_height", None) is not None:
+            env_cfg.curriculum.box_height = None
+        if hasattr(env_cfg, "scene") and hasattr(env_cfg.scene, "box"):
+            center_z = args_cli.box_top_height - 0.5
+            env_cfg.scene.box.init_state.pos = (0.0, 0.0, center_z)
     agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(task_name, args_cli)
 
     # specify directory for logging experiments
