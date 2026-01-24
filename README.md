@@ -31,7 +31,7 @@ Clone this repository and set up the environment:
 git clone https://github.com/DoD0d0/IsaacLab_Dodo.git
 cd IsaacLab_Dodo
 conda create -n isaaclab python=3.10
-conda activate isaalab
+conda activate isaaclab
 pip install --upgrade pip
 pip install "isaacsim[all,extscache]==4.5.0.0" --extra-index-url https://pypi.nvidia.com
 pip install -U torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
@@ -56,6 +56,17 @@ This project trains a **bipedal Dodo robot** to track commanded base velocities 
 - Control mode: **Joint position control (implicit actuators)**
 
 The task is implemented as a **Manager-Based RL Environment** in Isaac Lab.
+
+---
+
+## 🦘 Task Overview: Jump (Dodo)
+
+This task trains the Dodo robot to move its **base toward a box-top target**.
+
+- Task type: Target position tracking (box top)
+- Terrain: Flat plane (fixed)
+- Command: `target_pos` = box top + `z_offset`
+- RL framework: **RSL-RL (PPO)**
 
 ---
 
@@ -187,6 +198,19 @@ All observation terms are concatenated into a single flat vector before being pa
 
 ---
 
+## 👀 Observation Space (Jump Task)
+
+Jump task observations differ from velocity tracking:
+
+- Projected gravity
+- Target position command (`target_pos`)
+- Joint positions (relative, noisy)
+- Joint velocities (relative, noisy)
+- Previous action
+- Height scan (ground + box)
+
+---
+
 ## 🏞️ Environment Variants
 
 ### Flat Terrain (`DodoFlatEnvCfg`)
@@ -197,6 +221,53 @@ All observation terms are concatenated into a single flat vector before being pa
   - Faster training
   - Debugging
   - Baseline performance
+
+---
+
+## 🦘 Jump Task (Dodo)
+
+This workspace also includes a custom jump task targeting a **box-top position**.
+
+### Training
+
+```bash
+./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
+  --task=Isaac-Jump-Dodo-v0 \
+  --num_envs=4096 \
+  --log_project_name=DodoBox \
+  --headless
+```
+
+### Play (with optional box height override)
+
+```bash
+./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/play.py \
+  --task=Isaac-Jump-Dodo-Play-v0 \
+  --checkpoint=logs/rsl_rl/dodo_jump/<RUN>/model_<ITER>.pt \
+  --num_envs=1 \
+  --box_top_height=0.0907
+```
+
+`--box_top_height` overrides the box **top height** and disables the box height curriculum in play mode.
+
+### Measure Robot Height
+
+```bash
+./isaaclab.sh -p scripts/tools/measure_robot_height.py \
+  --task=Isaac-Jump-Dodo-Play-v0 \
+  --num_envs=1 \
+  --headless
+```
+
+This prints `root_z`, `min_body_z`, `max_body_z`, and an approximate robot height.
+
+---
+
+## 🏞️ Jump Environment Defaults
+
+- Terrain: **Plane**
+- Box present in every env
+- Height scan includes **ground + box**
 
 ### Rough Terrain (`DodoRoughEnvCfg`)
 - Terrain type: Procedurally generated rough terrain
@@ -232,6 +303,23 @@ The reward is a weighted sum of multiple terms.
 Reward weights differ slightly between flat and rough terrain variants.
 
 ---
+
+## 🎯 Reward Function (Jump Task)
+
+Jump task rewards are **target-position based**, not velocity based:
+
+- Target position tracking (`target_pos`) using exponential and L2 terms
+- Optional XY-only shaping term
+
+The jump task does not use velocity tracking rewards.
+
+---
+
+## 🧾 Jump Task Defaults (Current)
+
+- Box target present with fixed size
+- Target command: `target_pos = box_top + z_offset`
+- Rewards: `track_box_center_exp`, `track_box_center_l2` (optional XY shaping)
 
 ## 📉 Why Exponential Tracking Rewards?
 
