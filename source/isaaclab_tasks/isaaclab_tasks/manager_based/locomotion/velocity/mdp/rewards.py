@@ -115,3 +115,93 @@ def track_ang_vel_z_world_exp(
     asset = env.scene[asset_cfg.name]
     ang_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 2] - asset.data.root_ang_vel_w[:, 2])
     return torch.exp(-ang_vel_error / std**2)
+
+
+def track_box_center_pos_exp(
+    env,
+    box_cfg: SceneEntityCfg,
+    std: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    z_offset: float = 0.0,
+) -> torch.Tensor:
+    """Reward proximity to the box center (with optional z-offset) using exponential kernel."""
+    asset = env.scene[asset_cfg.name]
+    box = env.scene[box_cfg.name]
+    target_pos = box.data.root_pos_w.clone()
+    target_pos[:, 2] += z_offset
+    pos_error = torch.sum(torch.square(asset.data.root_pos_w - target_pos), dim=1)
+    return torch.exp(-pos_error / std**2)
+
+
+def _get_asset_pos_w(env, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Return root position or mean body position if body_ids are specified."""
+    asset = env.scene[asset_cfg.name]
+    if isinstance(asset_cfg.body_ids, slice):
+        return asset.data.root_pos_w
+    body_pos = asset.data.body_pos_w[:, asset_cfg.body_ids, :]
+    return torch.mean(body_pos, dim=1)
+
+
+def track_command_pos_exp(
+    env,
+    command_name: str,
+    std: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward tracking of commanded position in world frame using exponential kernel."""
+    command = env.command_manager.get_command(command_name)
+    pos_w = _get_asset_pos_w(env, asset_cfg)
+    pos_error = torch.sum(torch.square(pos_w - command), dim=1)
+    return torch.exp(-pos_error / std**2)
+
+
+def track_command_pos_l2(
+    env,
+    command_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward negative distance to commanded position in world frame."""
+    command = env.command_manager.get_command(command_name)
+    pos_w = _get_asset_pos_w(env, asset_cfg)
+    dist = torch.norm(pos_w - command, dim=1)
+    return -dist
+
+
+def track_command_pos_xy_l2(
+    env,
+    command_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward negative XY distance to commanded position in world frame."""
+    command = env.command_manager.get_command(command_name)
+    pos_w = _get_asset_pos_w(env, asset_cfg)
+    dist = torch.norm(pos_w[:, :2] - command[:, :2], dim=1)
+    return -dist
+
+
+def track_command_height_exp(
+    env,
+    command_name: str,
+    std: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward tracking of commanded height using exponential kernel."""
+    asset = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+    height_error = torch.square(asset.data.root_pos_w[:, 2] - command[:, 2])
+    return torch.exp(-height_error / std**2)
+
+
+def track_feet_below_command_height_penalty(
+    env,
+    command_name: str,
+    asset_cfg: SceneEntityCfg,
+    min_excess: float = 0.0,
+) -> torch.Tensor:
+    """Penalty when feet are below commanded height (no penalty for overshoot)."""
+    asset = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+    target_z = command[:, 2].unsqueeze(1)
+    feet_z = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
+    deficit = target_z + min_excess - feet_z
+    return -torch.mean(torch.clamp(deficit, min=0.0), dim=1)

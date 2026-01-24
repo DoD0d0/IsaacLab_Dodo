@@ -105,3 +105,186 @@ def height_command_range(
     cmd = env.command_manager.get_term(command_name)
     cmd.cfg.ranges.height = (min_height, max_height)
     return max_height
+
+
+def box_height_steps(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    asset_cfg: SceneEntityCfg,
+    local_xy: tuple[float, float],
+    start_height: float,
+    step_height: float,
+    max_height: float,
+    step_interval: int,
+    start_step: int = 0,
+) -> float:
+    """Increase the box height in discrete steps based on the common step counter."""
+    if step_interval <= 0:
+        step_index = 0
+    else:
+        step_index = (env.common_step_counter - start_step) // step_interval
+        step_index = max(0, step_index)
+    target_height = min(start_height + step_height * float(step_index), max_height)
+
+    box = env.scene[asset_cfg.name]
+    env_origins = env.scene.env_origins[env_ids]
+    target_pos = env_origins.clone()
+    target_pos[:, 0] += local_xy[0]
+    target_pos[:, 1] += local_xy[1]
+    target_pos[:, 2] += target_height
+    target_pose = torch.cat([target_pos, box.data.root_quat_w[env_ids]], dim=1)
+    box.write_root_pose_to_sim(target_pose, env_ids=env_ids)
+    return target_height
+
+
+def box_height_on_reach(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int] | slice,
+    asset_cfg: SceneEntityCfg,
+    local_xy: tuple[float, float],
+    start_height: float,
+    step_height: float,
+    max_height: float,
+    reach_threshold: float,
+    min_steps: int = 1,
+    asset_target_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    z_offset: float = 0.0,
+) -> float:
+    """Increase box height when the target position is reached."""
+    if isinstance(env_ids, slice):
+        env_ids = torch.arange(env.num_envs, device=env.device)
+    else:
+        env_ids = torch.as_tensor(env_ids, device=env.device, dtype=torch.long)
+
+    if not hasattr(env, "_box_height_levels"):
+        env._box_height_levels = torch.zeros(env.num_envs, device=env.device)
+        env._box_reach_counts = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
+
+    levels = env._box_height_levels
+    reach_counts = env._box_reach_counts
+
+    max_level = int(max(0.0, (max_height - start_height) / step_height))
+    levels.clamp_(0, max_level)
+
+    box = env.scene[asset_cfg.name]
+    env_origins = env.scene.env_origins[env_ids]
+    target_height = start_height + levels[env_ids] * step_height
+    target_height = torch.clamp(target_height, max=max_height)
+    target_pos = env_origins.clone()
+    target_pos[:, 0] += local_xy[0]
+    target_pos[:, 1] += local_xy[1]
+    target_pos[:, 2] += target_height
+    target_pose = torch.cat([target_pos, box.data.root_quat_w[env_ids]], dim=1)
+    box.write_root_pose_to_sim(target_pose, env_ids=env_ids)
+
+    asset = env.scene[asset_target_cfg.name]
+    goal_pos = target_pos.clone()
+    goal_pos[:, 2] += z_offset
+    dist = torch.norm(asset.data.root_pos_w[env_ids] - goal_pos, dim=1)
+    in_target = dist < reach_threshold
+
+    reach_counts[env_ids] = torch.where(
+        in_target, reach_counts[env_ids] + 1, torch.zeros_like(reach_counts[env_ids])
+    )
+    advance = (reach_counts[env_ids] >= min_steps) & (levels[env_ids] < max_level)
+    if torch.any(advance):
+        levels[env_ids] = torch.where(advance, levels[env_ids] + 1, levels[env_ids])
+        reach_counts[env_ids] = torch.where(advance, torch.zeros_like(reach_counts[env_ids]), reach_counts[env_ids])
+        updated_height = start_height + levels[env_ids] * step_height
+        updated_height = torch.clamp(updated_height, max=max_height)
+        target_pos[:, 2] = env_origins[:, 2] + updated_height
+        target_pose = torch.cat([target_pos, box.data.root_quat_w[env_ids]], dim=1)
+        box.write_root_pose_to_sim(target_pose, env_ids=env_ids)
+
+    return torch.mean(start_height + levels[env_ids] * step_height).item()
+
+
+def box_top_height_on_reach(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int] | slice,
+    asset_cfg: SceneEntityCfg,
+    local_xy: tuple[float, float],
+    start_height: float,
+    step_height: float,
+    max_height: float,
+    box_half_height: float,
+    reach_threshold: float,
+    min_steps: int = 1,
+    asset_target_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    z_offset: float = 0.0,
+) -> float:
+    """Increase box top height when the target position is reached."""
+    if isinstance(env_ids, slice):
+        env_ids = torch.arange(env.num_envs, device=env.device)
+    else:
+        env_ids = torch.as_tensor(env_ids, device=env.device, dtype=torch.long)
+
+    if not hasattr(env, "_box_top_height_levels"):
+        env._box_top_height_levels = torch.zeros(env.num_envs, device=env.device)
+        env._box_top_reach_counts = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
+
+    levels = env._box_top_height_levels
+    reach_counts = env._box_top_reach_counts
+
+    max_level = int(max(0.0, (max_height - start_height) / step_height))
+    levels.clamp_(0, max_level)
+
+    box = env.scene[asset_cfg.name]
+    env_origins = env.scene.env_origins[env_ids]
+    top_height = start_height + levels[env_ids] * step_height
+    top_height = torch.clamp(top_height, max=max_height)
+    center_height = top_height - box_half_height
+    center_pos = env_origins.clone()
+    center_pos[:, 0] += local_xy[0]
+    center_pos[:, 1] += local_xy[1]
+    center_pos[:, 2] += center_height
+    target_pose = torch.cat([center_pos, box.data.root_quat_w[env_ids]], dim=1)
+    box.write_root_pose_to_sim(target_pose, env_ids=env_ids)
+
+    asset = env.scene[asset_target_cfg.name]
+    goal_pos = env_origins.clone()
+    goal_pos[:, 0] += local_xy[0]
+    goal_pos[:, 1] += local_xy[1]
+    goal_pos[:, 2] += top_height + z_offset
+    dist = torch.norm(asset.data.root_pos_w[env_ids] - goal_pos, dim=1)
+    in_target = dist < reach_threshold
+
+    reach_counts[env_ids] = torch.where(
+        in_target, reach_counts[env_ids] + 1, torch.zeros_like(reach_counts[env_ids])
+    )
+    advance = (reach_counts[env_ids] >= min_steps) & (levels[env_ids] < max_level)
+    if torch.any(advance):
+        levels[env_ids] = torch.where(advance, levels[env_ids] + 1, levels[env_ids])
+        reach_counts[env_ids] = torch.where(advance, torch.zeros_like(reach_counts[env_ids]), reach_counts[env_ids])
+        updated_top = start_height + levels[env_ids] * step_height
+        updated_top = torch.clamp(updated_top, max=max_height)
+        updated_center = updated_top - box_half_height
+        center_pos[:, 2] = env_origins[:, 2] + updated_center
+        target_pose = torch.cat([center_pos, box.data.root_quat_w[env_ids]], dim=1)
+        box.write_root_pose_to_sim(target_pose, env_ids=env_ids)
+
+    return torch.mean(start_height + levels[env_ids] * step_height).item()
+
+
+def foot_clearance_metrics(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int] | slice,
+    asset_cfg: SceneEntityCfg,
+    min_height: float = 0.0,
+) -> dict[str, torch.Tensor]:
+    """Compute simple foot clearance metrics for logging."""
+    if isinstance(env_ids, slice):
+        env_ids = torch.arange(env.num_envs, device=env.device)
+    else:
+        env_ids = torch.as_tensor(env_ids, device=env.device, dtype=torch.long)
+
+    asset = env.scene[asset_cfg.name]
+    body_pos_w = asset.data.body_pos_w[env_ids][:, asset_cfg.body_ids, 2]
+    env_origin_z = env.scene.env_origins[env_ids, 2].unsqueeze(1)
+    heights = body_pos_w - env_origin_z
+    min_height_val = torch.min(heights, dim=1)[0]
+    frac_below = torch.mean((min_height_val < min_height).float())
+    return {
+        "min_height": torch.mean(min_height_val),
+        "frac_below": frac_below,
+    }
