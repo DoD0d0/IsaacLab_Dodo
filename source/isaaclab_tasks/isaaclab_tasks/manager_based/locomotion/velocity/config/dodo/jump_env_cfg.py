@@ -1,5 +1,7 @@
 # Configuration for Dodo robot in jump-height environment. - YOU-RI
 
+import math
+
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
@@ -45,7 +47,7 @@ class DodoJumpCommandsCfg:
     target_pos = mdp.BoxCenterCommandCfg(
         class_type=mdp.BoxCenterCommand,
         asset_name="box",
-        z_offset=0.9,
+        z_offset=1.1,
         resampling_time_range=(1.0, 1.0),
     )
 
@@ -81,20 +83,19 @@ class DodoJumpRewardsCfg:
 
     termination_base_contact = RewTerm(
         func=mdp.is_terminated_term,
-        weight=-300.0,
+        weight=-500.0,
         params={"term_keys": ["base_contact"]},
     )
     termination_root_height = RewTerm(
         func=mdp.is_terminated_term,
-        weight=-300.0,
+        weight=-400.0,
         params={"term_keys": ["root_height_below_minimum"]},
     )
-    termination_bad_pitch = RewTerm(
-        func=mdp.is_terminated_term,
-        weight=-100.0,
-        params={"term_keys": ["bad_pitch"]},
-    )
-    time_out_reward = RewTerm(func=mdp.is_time_out, weight=10.0)
+    # termination_bad_pitch = RewTerm(
+    #     func=mdp.is_terminated_term,
+    #     weight=-400.0,
+    #     params={"term_keys": ["bad_pitch"]},
+    # )
     track_box_center_exp = RewTerm(
         func=mdp.track_command_pos_exp,
         weight=100.0,
@@ -105,15 +106,50 @@ class DodoJumpRewardsCfg:
         weight=1.0,
         params={"command_name": "target_pos"},
     )
-    # feet_to_box_top_l2 = RewTerm(
-    #     func=mdp.feet_to_box_top_l2,
-    #     weight=-0.1,
-    #     params={
-    #         "box_cfg": SceneEntityCfg("box"),
-    #         "asset_cfg": SceneEntityCfg("robot", body_names=["left_link_4", "right_link_4"]),
-    #         "box_half_height": 0.5,
-    #     },
-    # )
+    feet_height_to_box_top_exp = RewTerm(
+        func=mdp.feet_to_box_top_height_exp_blend,
+        weight=3.0,
+        params={
+            "box_cfg": SceneEntityCfg("box"),
+            "asset_cfg": SceneEntityCfg("robot", body_names=["left_link_4", "right_link_4"]),
+            "box_half_height": 0.5,
+            "margin": 0.05,
+            "std": 0.2,
+            "start_step": 0,
+            "end_step": 100000,
+        },
+    )
+    feet_xy_to_box_center_exp = RewTerm(
+        func=mdp.feet_to_box_center_xy_exp_blend,
+        weight=2.0,
+        params={
+            "box_cfg": SceneEntityCfg("box"),
+            "asset_cfg": SceneEntityCfg("robot", body_names=["left_link_4", "right_link_4"]),
+            "std": 0.7,
+            "start_step": 0,
+            "end_step": 100000,
+        },
+    )
+    knees_to_box_center_height_exp = RewTerm(
+        func=mdp.knees_to_box_center_height_exp,
+        weight=1.0,
+        params={
+            "box_cfg": SceneEntityCfg("box"),
+            "asset_cfg": SceneEntityCfg("robot", body_names=["left_link_3", "right_link_3"]),
+            "target_height": 0.4,
+            "std": 0.2,
+        },
+    )
+    base_pitch_back_penalty = RewTerm(
+        func=mdp.base_pitch_back_penalty,
+        weight=-3.0,
+        params={"limit_angle": math.radians(30.0)},
+    )
+    body_contact_penalty = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-100.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["body_link"]), "threshold": 1.0},
+    )
 
 
 @configclass
@@ -131,8 +167,8 @@ class DodoJumpCurriculumCfg:
             "max_height": 1.0,
             "box_half_height": 0.5,
             "reach_threshold": 0.5,
-            "min_steps": 10,
-            "z_offset": 0.0,
+            "min_steps": 20,
+            "z_offset": 0.5,
         },
     )
 
@@ -152,6 +188,7 @@ class DodoJumpEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         self.sim.use_fabric = False
         self.episode_length_s = 8.0
+        self.actions.joint_pos.scale = 1.0
 
         self.scene.terrain.terrain_type = "plane"
         self.scene.terrain.terrain_generator = None
@@ -179,10 +216,10 @@ class DodoJumpEnvCfg(LocomotionVelocityRoughEnvCfg):
         }
 
         self.terminations.base_contact.params["sensor_cfg"].body_names = ["body_link"]
-        self.terminations.root_height_below_minimum.params["minimum_height"] = 0.25
+        self.terminations.root_height_below_minimum.params["minimum_height"] = 0.2
         self.terminations.bad_pitch = DoneTerm(
             func=mdp.bad_orientation,
-            params={"axis": 1, "limit_angle": 0.785398},
+            params={"axis": 1, "limit_angle": math.radians(120.0)},
         )
 
 

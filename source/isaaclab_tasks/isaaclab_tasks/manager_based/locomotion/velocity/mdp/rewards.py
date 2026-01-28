@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import ContactSensor
-from isaaclab.utils.math import quat_apply_inverse, yaw_quat
+from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse, wrap_to_pi, yaw_quat
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -222,3 +222,122 @@ def feet_to_box_top_l2(
     feet_pos = asset.data.body_pos_w[:, asset_cfg.body_ids, :]
     dist = torch.norm(feet_pos[..., :2] - target_pos[:, None, :2], dim=-1)
     return torch.mean(dist, dim=1)
+
+
+def feet_to_box_top_height_exp(
+    env,
+    box_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg,
+    box_half_height: float,
+    margin: float,
+    std: float,
+) -> torch.Tensor:
+    """Reward feet height proximity to box top height using exponential kernel."""
+    box = env.scene[box_cfg.name]
+    asset = env.scene[asset_cfg.name]
+    target_z = box.data.root_pos_w[:, 2] + box_half_height + margin
+    feet_z = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
+    height_error = torch.mean(torch.square(feet_z - target_z.unsqueeze(1)), dim=1)
+    return torch.exp(-height_error / std**2)
+
+
+def feet_to_box_center_xy_exp(
+    env,
+    box_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg,
+    std: float,
+) -> torch.Tensor:
+    """Reward feet XY proximity to box center using exponential kernel."""
+    box = env.scene[box_cfg.name]
+    asset = env.scene[asset_cfg.name]
+    target_xy = box.data.root_pos_w[:, :2]
+    feet_xy = asset.data.body_pos_w[:, asset_cfg.body_ids, :2]
+    xy_error = torch.mean(torch.square(feet_xy - target_xy.unsqueeze(1)), dim=(1, 2))
+    return torch.exp(-xy_error / std**2)
+
+
+def feet_to_box_top_height_exp_blend(
+    env,
+    box_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg,
+    box_half_height: float,
+    margin: float,
+    std: float,
+    start_step: int,
+    end_step: int,
+) -> torch.Tensor:
+    """Blend min->mean feet height error to box top height over training steps."""
+    box = env.scene[box_cfg.name]
+    asset = env.scene[asset_cfg.name]
+    target_z = box.data.root_pos_w[:, 2] + box_half_height + margin
+    feet_z = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
+    per_foot_error = torch.square(feet_z - target_z.unsqueeze(1))
+
+    if end_step <= start_step:
+        blend = 1.0
+    else:
+        blend = float(env.common_step_counter - start_step) / float(end_step - start_step)
+    blend = float(max(0.0, min(1.0, blend)))
+
+    min_error = torch.min(per_foot_error, dim=1)[0]
+    mean_error = torch.mean(per_foot_error, dim=1)
+    error = (1.0 - blend) * min_error + blend * mean_error
+    return torch.exp(-error / std**2)
+
+
+def feet_to_box_center_xy_exp_blend(
+    env,
+    box_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg,
+    std: float,
+    start_step: int,
+    end_step: int,
+) -> torch.Tensor:
+    """Blend min->mean feet XY error to box center over training steps."""
+    box = env.scene[box_cfg.name]
+    asset = env.scene[asset_cfg.name]
+    target_xy = box.data.root_pos_w[:, :2]
+    feet_xy = asset.data.body_pos_w[:, asset_cfg.body_ids, :2]
+    per_foot_error = torch.sum(torch.square(feet_xy - target_xy.unsqueeze(1)), dim=-1)
+
+    if end_step <= start_step:
+        blend = 1.0
+    else:
+        blend = float(env.common_step_counter - start_step) / float(end_step - start_step)
+    blend = float(max(0.0, min(1.0, blend)))
+
+    min_error = torch.min(per_foot_error, dim=1)[0]
+    mean_error = torch.mean(per_foot_error, dim=1)
+    error = (1.0 - blend) * min_error + blend * mean_error
+    return torch.exp(-error / std**2)
+
+
+def base_pitch_back_penalty(
+    env,
+    limit_angle: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize backward pitch beyond a limit (negative pitch)."""
+    asset = env.scene[asset_cfg.name]
+    pitch = wrap_to_pi(euler_xyz_from_quat(asset.data.root_quat_w)[1])
+    excess = torch.clamp((-pitch - limit_angle), min=0.0)
+    return torch.square(excess)
+
+
+def knees_to_box_center_height_exp(
+    env,
+    box_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg,
+    target_height: float,
+    std: float,
+) -> torch.Tensor:
+    """Reward knees being near box center XY at a target height above ground."""
+    box = env.scene[box_cfg.name]
+    asset = env.scene[asset_cfg.name]
+    env_origin_z = env.scene.env_origins[:, 2]
+    target_z = env_origin_z + target_height
+    target_pos = box.data.root_pos_w.clone()
+    target_pos[:, 2] = target_z
+    knee_pos = asset.data.body_pos_w[:, asset_cfg.body_ids, :]
+    pos_error = torch.mean(torch.sum(torch.square(knee_pos - target_pos.unsqueeze(1)), dim=-1), dim=1)
+    return torch.exp(-pos_error / std**2)
