@@ -83,29 +83,24 @@ class DodoJumpRewardsCfg:
 
     termination_base_contact = RewTerm(
         func=mdp.is_terminated_term,
-        weight=-500.0,
+        weight=-800.0,
         params={"term_keys": ["base_contact"]},
-    )
+    )  # terminate on base contact
     termination_root_height = RewTerm(
         func=mdp.is_terminated_term,
         weight=-400.0,
         params={"term_keys": ["root_height_below_minimum"]},
-    )
-    # termination_bad_pitch = RewTerm(
-    #     func=mdp.is_terminated_term,
-    #     weight=-400.0,
-    #     params={"term_keys": ["bad_pitch"]},
-    # )
+    )  # terminate on low root height
     track_box_center_exp = RewTerm(
         func=mdp.track_command_pos_exp,
         weight=100.0,
         params={"command_name": "target_pos", "std": 0.6},
-    )
+    )  # strong pull toward target_pos (box center + z offset)
     track_box_center_l2 = RewTerm(
         func=mdp.track_command_pos_l2,
         weight=1.0,
         params={"command_name": "target_pos"},
-    )
+    )  # mild L2 pull toward target_pos
     feet_height_to_box_top_exp = RewTerm(
         func=mdp.feet_to_box_top_height_exp_blend,
         weight=3.0,
@@ -118,10 +113,10 @@ class DodoJumpRewardsCfg:
             "start_step": 0,
             "end_step": 100000,
         },
-    )
+    )  # feet height near box top (+margin), min->mean blend
     feet_xy_to_box_center_exp = RewTerm(
         func=mdp.feet_to_box_center_xy_exp_blend,
-        weight=2.0,
+        weight=3.0,
         params={
             "box_cfg": SceneEntityCfg("box"),
             "asset_cfg": SceneEntityCfg("robot", body_names=["left_link_4", "right_link_4"]),
@@ -129,27 +124,27 @@ class DodoJumpRewardsCfg:
             "start_step": 0,
             "end_step": 100000,
         },
-    )
+    )  # feet XY toward box center, min->mean blend
     knees_to_box_center_height_exp = RewTerm(
         func=mdp.knees_to_box_center_height_exp,
         weight=1.0,
         params={
             "box_cfg": SceneEntityCfg("box"),
             "asset_cfg": SceneEntityCfg("robot", body_names=["left_link_3", "right_link_3"]),
-            "target_height": 0.4,
+            "target_height": 1.0,
             "std": 0.2,
         },
-    )
+    )  # knees near box center at fixed height
     base_pitch_back_penalty = RewTerm(
         func=mdp.base_pitch_back_penalty,
         weight=-3.0,
         params={"limit_angle": math.radians(30.0)},
-    )
+    )  # penalize backward pitch beyond 30 deg
     body_contact_penalty = RewTerm(
         func=mdp.undesired_contacts,
         weight=-100.0,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["body_link"]), "threshold": 1.0},
-    )
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["body_link","left_link_3", "right_link_3"]), "threshold": 1.0},
+    )  # penalize contact forces on body/knees
 
 
 @configclass
