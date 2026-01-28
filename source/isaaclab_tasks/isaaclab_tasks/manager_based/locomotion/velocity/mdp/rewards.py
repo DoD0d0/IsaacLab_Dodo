@@ -205,3 +205,20 @@ def track_feet_below_command_height_penalty(
     feet_z = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
     deficit = target_z + min_excess - feet_z
     return -torch.mean(torch.clamp(deficit, min=0.0), dim=1)
+
+
+def feet_to_box_top_l2(
+    env,
+    box_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg,
+    box_half_height: float,
+    z_offset: float = 0.0,
+) -> torch.Tensor:
+    """Return mean L2 XY distance of feet to the box top center in world frame."""
+    box = env.scene[box_cfg.name]
+    asset = env.scene[asset_cfg.name]
+    target_pos = box.data.root_pos_w.clone()
+    target_pos[:, 2] += box_half_height + z_offset
+    feet_pos = asset.data.body_pos_w[:, asset_cfg.body_ids, :]
+    dist = torch.norm(feet_pos[..., :2] - target_pos[:, None, :2], dim=-1)
+    return torch.mean(dist, dim=1)

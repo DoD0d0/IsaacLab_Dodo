@@ -38,6 +38,11 @@ def is_terminated(env: ManagerBasedRLEnv) -> torch.Tensor:
     return env.termination_manager.terminated.float()
 
 
+def is_time_out(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """Reward or penalize episodes that end due to timeout."""
+    return env.termination_manager.time_outs.float()
+
+
 class is_terminated_term(ManagerTermBase):
     """Penalize termination for specific terms that don't correspond to episodic timeouts.
 
