@@ -68,6 +68,8 @@ def get_dodo_cfg(usd_path: str | None = None) -> ArticulationCfg:
                 joint_names_expr=["left_joint_.*", "right_joint_.*"],
                 stiffness=80.0, # Nm/rad, original: 40.0
                 damping=4.0,  # Nms/rad, original: 2.0
+                effort_limit_sim=20.0,  # Nm, original: 9.0
+                velocity_limit_sim=30.0,  # rad/s, original: 15.0
             )
         },
     )
