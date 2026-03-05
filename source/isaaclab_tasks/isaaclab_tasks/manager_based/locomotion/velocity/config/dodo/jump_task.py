@@ -33,7 +33,7 @@ class DodoJumpEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         self.sim.use_fabric = False
         self.episode_length_s = 8.0
-        self.actions.joint_pos.scale = 0.35
+        self.actions.joint_pos.scale = 0.45
         self.observations.policy.enable_corruption = False
 
         self.scene.terrain.terrain_type = "plane"
@@ -50,7 +50,8 @@ class DodoJumpEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.events.base_external_force_torque.params["asset_cfg"].body_names = ["body_link"]
         self.events.base_com.params["asset_cfg"].body_names = ["body_link"]
         self.events.reset_base.params = {
-            "pose_range": {"x": (-0.8, -0.8), "y": (0.0, 0.0), "z": (0.16, 0.16), "yaw": (0.0, 0.0)},
+            # Box half-length is 0.75 m; start farther from the front edge to allow approach before stepping up.
+            "pose_range": {"x": (-1.0, -1.0), "y": (0.0, 0.0), "z": (0.16, 0.16), "yaw": (0.0, 0.0)},
             "velocity_range": {
                 "x": (0.0, 0.0),
                 "y": (0.0, 0.0),
