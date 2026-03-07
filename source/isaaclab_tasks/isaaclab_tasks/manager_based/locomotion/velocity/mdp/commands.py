@@ -11,86 +11,12 @@ import torch
 from dataclasses import MISSING
 from typing import TYPE_CHECKING
 
-from isaaclab.managers import CommandTerm, CommandTermCfg
-from isaaclab.sensors import RayCaster
+from isaaclab.managers import CommandTerm, CommandTermCfg, SceneEntityCfg
+from isaaclab.utils.math import quat_apply_inverse
 from isaaclab.utils import configclass
 
 if TYPE_CHECKING:
-    from isaaclab.assets import Articulation
     from isaaclab.envs import ManagerBasedEnv
-
-
-@configclass
-class UniformHeightCommandCfg(CommandTermCfg):
-    """Configuration for uniform height command generator."""
-
-    class_type: type = MISSING
-
-    asset_name: str = MISSING
-    """Name of the asset in the environment for which the commands are generated."""
-
-    sensor_name: str | None = None
-    """Optional name of a ray-caster sensor used to estimate terrain height."""
-
-    @configclass
-    class Ranges:
-        """Uniform distribution ranges for the height commands."""
-
-        height: tuple[float, float] = MISSING
-        """Range for the height command above terrain (in m)."""
-
-    ranges: Ranges = MISSING
-    """Ranges for the commands."""
-
-
-class UniformHeightCommand(CommandTerm):
-    """Command generator for generating height commands uniformly."""
-
-    cfg: UniformHeightCommandCfg
-
-    def __init__(self, cfg: UniformHeightCommandCfg, env: ManagerBasedEnv):
-        super().__init__(cfg, env)
-
-        self.robot: Articulation = env.scene[cfg.asset_name]
-        self.sensor: RayCaster | None = env.scene.sensors.get(cfg.sensor_name) if cfg.sensor_name else None
-
-        self.height_command = torch.zeros(self.num_envs, 1, device=self.device)
-        self.target_height_w = torch.zeros(self.num_envs, device=self.device)
-        self.metrics["height_error"] = torch.zeros(self.num_envs, device=self.device)
-
-    def __str__(self) -> str:
-        msg = "UniformHeightCommand:\n"
-        msg += f"\tCommand dimension: {tuple(self.command.shape[1:])}\n"
-        msg += f"\tResampling time range: {self.cfg.resampling_time_range}\n"
-        return msg
-
-    @property
-    def command(self) -> torch.Tensor:
-        """The desired height command. Shape is (num_envs, 1)."""
-        return self.height_command
-
-    def _get_ground_height(self) -> torch.Tensor:
-        if self.sensor is None:
-            return self.robot.data.default_root_state[:, 2]
-        return torch.mean(self.sensor.data.ray_hits_w[..., 2], dim=1)
-
-    def _update_target_height(self):
-        ground_height = self._get_ground_height()
-        self.target_height_w[:] = ground_height + self.height_command.squeeze(1)
-
-    def _update_metrics(self):
-        self._update_target_height()
-        self.metrics["height_error"] = torch.abs(self.robot.data.root_pos_w[:, 2] - self.target_height_w)
-
-    def _resample_command(self, env_ids):
-        r = torch.empty(len(env_ids), device=self.device)
-        self.height_command[env_ids, 0] = r.uniform_(*self.cfg.ranges.height)
-
-    def _update_command(self):
-        self._update_target_height()
-
-
-UniformHeightCommandCfg.class_type = UniformHeightCommand
 
 
 @configclass
@@ -116,6 +42,8 @@ class BoxCenterCommand(CommandTerm):
         self.box = env.scene[cfg.asset_name]
         self.target_pos = torch.zeros(self.num_envs, 3, device=self.device)
         self.metrics["pos_error"] = torch.zeros(self.num_envs, device=self.device)
+        self.metrics["pos_error_xy"] = torch.zeros(self.num_envs, device=self.device)
+        self.metrics["pos_error_z"] = torch.zeros(self.num_envs, device=self.device)
 
     def __str__(self) -> str:
         msg = "BoxCenterCommand:\n"
@@ -130,7 +58,10 @@ class BoxCenterCommand(CommandTerm):
 
     def _update_metrics(self):
         robot = self._env.scene["robot"]
-        self.metrics["pos_error"] = torch.norm(robot.data.root_pos_w - self.target_pos, dim=1)
+        pos_error = robot.data.root_pos_w - self.target_pos
+        self.metrics["pos_error"] = torch.norm(pos_error, dim=1)
+        self.metrics["pos_error_xy"] = torch.norm(pos_error[:, :2], dim=1)
+        self.metrics["pos_error_z"] = torch.abs(pos_error[:, 2])
 
     def _resample_command(self, env_ids):
         if len(env_ids) == 0:
@@ -144,3 +75,21 @@ class BoxCenterCommand(CommandTerm):
 
 
 BoxCenterCommandCfg.class_type = BoxCenterCommand
+
+
+def command_target_pos_b(
+    env: ManagerBasedEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Return target position command expressed in the robot base frame."""
+    asset = env.scene[asset_cfg.name]
+    command_w = env.command_manager.get_command(command_name)
+    rel_target_w = command_w - asset.data.root_pos_w
+    return quat_apply_inverse(asset.data.root_quat_w, rel_target_w)
+
+
+def command_time_to_go(env: ManagerBasedEnv) -> torch.Tensor:
+    """Return remaining episode time as a single observation term."""
+    remaining_s = (env.max_episode_length - env.episode_length_buf).float() * env.step_dt
+    return remaining_s.unsqueeze(1)

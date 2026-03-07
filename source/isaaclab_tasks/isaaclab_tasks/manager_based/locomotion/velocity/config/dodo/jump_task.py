@@ -34,7 +34,7 @@ class DodoJumpEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.sim.use_fabric = False
         self.episode_length_s = 8.0
         self.actions.joint_pos.scale = 0.45
-        self.observations.policy.enable_corruption = False
+        self.observations.policy.enable_corruption = True
 
         self.scene.terrain.terrain_type = "plane"
         self.scene.terrain.terrain_generator = None
@@ -43,6 +43,8 @@ class DodoJumpEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.scene.robot = _resolve_robot_cfg().replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/body_link"
         self.scene.height_scanner.mesh_prim_paths = ["/World/ground", "/World/envs/env_.*/Box"]
+        # Bias the scan grid forward so the box edge/top is observed earlier.
+        self.scene.height_scanner.offset.pos = (0.25, 0.0, 20.0)
 
         self.events.push_robot = None
         self.events.add_base_mass = None

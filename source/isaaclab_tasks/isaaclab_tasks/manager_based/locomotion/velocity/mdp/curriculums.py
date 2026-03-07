@@ -208,12 +208,20 @@ def box_top_height_on_reach(
     step_height: float,
     max_height: float,
     box_half_height: float,
-    reach_threshold: float,
+    reach_threshold: float | None = None,
+    reach_threshold_xy: float | None = None,
+    reach_threshold_z: float | None = None,
     min_steps: int = 1,
     asset_target_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     z_offset: float = 0.0,
+    require_time_out: bool = False,
+    forbid_term_names: Sequence[str] | None = None,
 ) -> float:
-    """Increase box top height when the target position is reached."""
+    """Increase box top height when the target position is reached.
+
+    If both ``reach_threshold_xy`` and ``reach_threshold_z`` are provided, use split xy/z
+    gates. Otherwise fall back to a single 3D distance threshold ``reach_threshold``.
+    """
     if isinstance(env_ids, slice):
         env_ids = torch.arange(env.num_envs, device=env.device)
     else:
@@ -246,8 +254,27 @@ def box_top_height_on_reach(
     goal_pos[:, 0] += local_xy[0]
     goal_pos[:, 1] += local_xy[1]
     goal_pos[:, 2] += top_height + z_offset
-    dist = torch.norm(asset.data.root_pos_w[env_ids] - goal_pos, dim=1)
-    in_target = dist < reach_threshold
+    pos_error = asset.data.root_pos_w[env_ids] - goal_pos
+    if reach_threshold_xy is not None and reach_threshold_z is not None:
+        dist_xy = torch.norm(pos_error[:, :2], dim=1)
+        dist_z = torch.abs(pos_error[:, 2])
+        in_target = (dist_xy < reach_threshold_xy) & (dist_z < reach_threshold_z)
+    else:
+        if reach_threshold is None:
+            raise ValueError(
+                "box_top_height_on_reach requires `reach_threshold`, or both "
+                "`reach_threshold_xy` and `reach_threshold_z`."
+            )
+        dist = torch.norm(pos_error, dim=1)
+        in_target = dist < reach_threshold
+
+    # Filter advancement by termination outcomes, so failed episodes don't push curriculum upward.
+    if require_time_out and "time_out" in env.termination_manager.active_terms:
+        in_target = in_target & env.termination_manager.get_term("time_out")[env_ids]
+    if forbid_term_names is not None:
+        for term_name in forbid_term_names:
+            if term_name in env.termination_manager.active_terms:
+                in_target = in_target & (~env.termination_manager.get_term(term_name)[env_ids])
 
     reach_counts[env_ids] = torch.where(
         in_target, reach_counts[env_ids] + 1, torch.zeros_like(reach_counts[env_ids])
