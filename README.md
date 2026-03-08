@@ -550,7 +550,7 @@ Activates only near episode end, forcing policy to reach target before timeout. 
 `exploration_velocity_bias_xy` (`rewards.py:195-240`)
 
 $$
-r_{\text{bias}} = \frac{v_{\text{xy}} \cdot (x_{\text{xy}}^* - x_{\text{xy}})}{\|v_{\text{xy}}\| \cdot \|x_{\text{xy}}^* - x_{\text{xy}}\|}
+r_{\text{bias}} = \frac{v_{\text{xy}} \cdot (x^*_{\text{xy}} - x_{\text{xy}})}{\|v_{\text{xy}}\| \cdot \|x^*_{\text{xy}} - x_{\text{xy}}\|}
 $$
 
 Cosine similarity between velocity and direction-to-target.
@@ -568,7 +568,7 @@ Encourages directional movement early in training, deactivates at higher heights
 
 $$
 r_{\text{stall}} = \begin{cases}
--1, & \|v_{\text{xy}}\| < 0.1 \text{ and } \|x_{\text{xy}} - x_{\text{xy}}^*\| > 0.4 \\
+-1, & \|v_{\text{xy}}\| < 0.1 \text{ and } \|x_{\text{xy}} - x^*_{\text{xy}}\| > 0.4 \\
 0, & \text{otherwise}
 \end{cases}
 $$
@@ -631,8 +631,8 @@ Jumping to 1m is too hard from scratch (sparse reward, exploration challenge).
 
 $$
 \begin{aligned}
-\|x_{\text{xy}} - x_{\text{xy}}^*\| &< 0.30 \text{ m} \\
-|x_z - x_z^*| &< 0.15 \text{ m} \\
+\|x_{\text{xy}} - x^*_{\text{xy}}\| &< 0.30 \text{ m} \\
+|x_z - x^*_z| &< 0.15 \text{ m} \\
 \text{time\_out} &= \text{True} \\
 \text{base\_contact} &= \text{False} \\
 \text{root\_height\_below\_minimum} &= \text{False} \\
