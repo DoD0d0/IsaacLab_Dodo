@@ -218,15 +218,15 @@ Based on `flat_env_cfg.py`:
 
 | Term | Weight | Formula | Purpose |
 |------|--------|---------|---------|
-| `track_lin_vel_xy_exp` | 4.5 | $\exp(-\frac{\|v_{xy} - v_{xy}^{\text{cmd}}\|^2}{0.4^2})$ | Track XY velocity |
+| `track_lin_vel_xy_exp` | 4.5 | $\exp(-\frac{\|v_{\text{xy}} - v_{\text{xy}}^{\text{cmd}}\|^2}{0.4^2})$ | Track XY velocity |
 | `track_ang_vel_z_exp` | 1.6 | $\exp(-\frac{(\omega_z - \omega_z^{\text{cmd}})^2}{0.5^2})$ | Track yaw rate |
 | `termination_penalty` | -100.0 | -100 if terminated | Penalize falls |
 | `flat_orientation_l2` | -0.8 | $-(\text{pitch}, \text{roll})^2$ | Keep upright |
 | `lin_vel_z_l2` | -0.5 | $-v_z^2$ | Minimize vertical motion |
-| `ang_vel_xy_l2` | -0.05 | $-\|\omega_{xy}\|^2$ | Minimize roll/pitch rate |
+| `ang_vel_xy_l2` | -0.05 | $-\|\omega_{\text{xy}}\|^2$ | Minimize roll/pitch rate |
 | `dof_acc_l2` | $-5 \times 10^{-8}$ | $-\sum_j \ddot{q}_j^2$ | Smooth joint motion |
 | `dof_torques_l2` | $-1 \times 10^{-6}$ | $-\sum_j \tau_j^2$ | Minimize torque |
-| `action_rate_l2` | -0.002 | $-\sum_i (a_t - a_{t-1})^2$ | Smooth actions |
+| `action_rate_l2` | -0.002 | $-\sum (a_t - a_{t-1})^2$ | Smooth actions |
 | `feet_air_time` | 0.75 | $\sum t_{\text{air}}$ (if $v_x > 0.1$) | Encourage stepping |
 | `feet_slide` | -0.25 | $-\sum \|v_{\text{foot}}\|$ (if contact) | Penalize sliding |
 | `joint_deviation_hip` | -0.02 | $-\|q_{\text{hip}} - q_{\text{default}}\|$ | Hip near default |
@@ -550,7 +550,7 @@ Activates only near episode end, forcing policy to reach target before timeout. 
 `exploration_velocity_bias_xy` (`rewards.py:195-240`)
 
 $$
-r_{\text{bias}} = \frac{v_{xy} \cdot (x_{xy}^* - x_{xy})}{\|v_{xy}\| \cdot \|x_{xy}^* - x_{xy}\|}
+r_{\text{bias}} = \frac{v_{\text{xy}} \cdot (x_{\text{xy}}^* - x_{\text{xy}})}{\|v_{\text{xy}}\| \cdot \|x_{\text{xy}}^* - x_{\text{xy}}\|}
 $$
 
 Cosine similarity between velocity and direction-to-target.
@@ -568,7 +568,7 @@ Encourages directional movement early in training, deactivates at higher heights
 
 $$
 r_{\text{stall}} = \begin{cases}
--1, & \|v_{xy}\| < 0.1 \text{ and } \|x_{xy} - x_{xy}^*\| > 0.4 \\
+-1, & \|v_{\text{xy}}\| < 0.1 \text{ and } \|x_{\text{xy}} - x_{\text{xy}}^*\| > 0.4 \\
 0, & \text{otherwise}
 \end{cases}
 $$
@@ -583,7 +583,7 @@ L2 squared kernel for smooth gradients.
 |------|--------|---------|------|
 | Joint acceleration | $-4.5 \times 10^{-8}$ | $\sum_j \ddot{q}_j^2$ | `isaaclab/.../rewards.py:168` |
 | Joint torques | $-1.1 \times 10^{-7}$ | $\sum_j \tau_j^2$ | `isaaclab/.../rewards.py:141` |
-| Action rate | $-0.002$ | $\sum_i (a_{t,i} - a_{t-1,i})^2$ | base |
+| Action rate | $-0.002$ | $\sum (a_t - a_{t-1})^2$ | base |
 | Feet acceleration | $-5.0 \times 10^{-7}$ | $\sum_{\text{foot}} \|\ddot{x}_{\text{foot}}\|^2$ | `mdp/rewards.py:157` |
 | Undesired contacts | $-1.0$ | $-1$ if body hits ground | base |
 
@@ -631,7 +631,7 @@ Jumping to 1m is too hard from scratch (sparse reward, exploration challenge).
 
 $$
 \begin{aligned}
-\|x_{xy} - x_{xy}^*\| &< 0.30 \text{ m} \\
+\|x_{\text{xy}} - x_{\text{xy}}^*\| &< 0.30 \text{ m} \\
 |x_z - x_z^*| &< 0.15 \text{ m} \\
 \text{time\_out} &= \text{True} \\
 \text{base\_contact} &= \text{False} \\
