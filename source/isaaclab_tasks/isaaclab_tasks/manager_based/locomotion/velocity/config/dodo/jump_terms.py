@@ -15,7 +15,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import My
 
 BOX_HALF_HEIGHT = 0.5
 BOX_START_TOP_HEIGHT = 0.0
-BOX_STEP_HEIGHT = 0.05
+BOX_STEP_HEIGHT = 0.03
 # Keep command target high enough to avoid "head dive" local optimum.
 COMMAND_TARGET_TOP_MARGIN = 0.6
 # Use the same top-margin as the command target for curriculum reach checks.
@@ -90,7 +90,7 @@ class DodoJumpRewardsCfg:
 
     task_pos_end_window = RewTerm(
         func=mdp.track_command_pos_task_window_curriculum,
-        weight=150.0,
+        weight=200.0,
         params={
             "command_name": "target_pos",
             # Keep the task window open in the current training horizon so the task reward is not stuck at zero.
@@ -105,12 +105,12 @@ class DodoJumpRewardsCfg:
     )
     exploration_bias_xy = RewTerm(
         func=mdp.exploration_velocity_bias_xy,
-        weight=2.0,
+        weight=1.0,
         params={
             "command_name": "target_pos",
             "min_distance": 0.2,
             "min_speed": 0.05,
-            "deactivate_top_height": 0.2,
+            "deactivate_top_height": 0.4,
             "box_start_height": BOX_START_TOP_HEIGHT,
             "box_step_height": BOX_STEP_HEIGHT,
         },
@@ -163,7 +163,7 @@ class DodoJumpCurriculumCfg:
             "box_half_height": BOX_HALF_HEIGHT,
             "reach_threshold_xy": CURRICULUM_REACH_THRESHOLD_XY,
             "reach_threshold_z": CURRICULUM_REACH_THRESHOLD_Z,
-            "min_steps": 10,
+            "min_steps": 30,
             "z_offset": CURRICULUM_REACH_TOP_MARGIN,
             "require_time_out": True,
             "forbid_term_names": ("base_contact", "root_height_below_minimum", "bad_pitch"),
