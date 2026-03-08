@@ -532,13 +532,13 @@ CURRICULUM_REACH_THRESHOLD_Z = 0.15
 
 $$
 r_{\text{task}} = \begin{cases}
-\frac{1}{T_r} \cdot \frac{1}{1 + \|x_b - x_b^*\|^2}, & t > T - T_r \\
+\frac{1}{T_r} \cdot \frac{1}{1 + \|x_b - x_b^{\ast}\|^2}, & t > T - T_r \\
 0, & \text{otherwise}
 \end{cases}
 $$
 
 - $x_b$: robot base position
-- $x_b^*$: target position
+- $x_b^{\ast}$: target position
 - $T$: 8s episode length
 - $T_r$: reward window (curriculum-scheduled, currently 40s = always active)
 - $t$: current time
@@ -631,8 +631,8 @@ Jumping to 1m is too hard from scratch (sparse reward, exploration challenge).
 
 $$
 \begin{aligned}
-\|x_{\text{xy}} - x^*_{\text{xy}}\| &< 0.30 \text{ m} \\
-|x_z - x^*_z| &< 0.15 \text{ m} \\
+\|x_{\text{xy}} - x^{\ast}_{\text{xy}}\| &< 0.30 \text{ m} \\
+|x_z - x^{\ast}_z| &< 0.15 \text{ m} \\
 \text{time\_out} &= \text{True} \\
 \text{base\_contact} &= \text{False} \\
 \text{root\_height\_below\_minimum} &= \text{False} \\
