@@ -221,7 +221,7 @@ Based on `flat_env_cfg.py`:
 | `track_lin_vel_xy_exp` | 4.5 | $\exp(-\frac{\|v_{xy} - v_{xy}^{\text{cmd}}\|^2}{0.4^2})$ | Track XY velocity |
 | `track_ang_vel_z_exp` | 1.6 | $\exp(-\frac{(\omega_z - \omega_z^{\text{cmd}})^2}{0.5^2})$ | Track yaw rate |
 | `termination_penalty` | -100.0 | -100 if terminated | Penalize falls |
-| `flat_orientation_l2` | -0.8 | $-\|$pitch, roll$\|^2$ | Keep upright |
+| `flat_orientation_l2` | -0.8 | $-(\text{pitch}, \text{roll})^2$ | Keep upright |
 | `lin_vel_z_l2` | -0.5 | $-v_z^2$ | Minimize vertical motion |
 | `ang_vel_xy_l2` | -0.05 | $-\|\omega_{xy}\|^2$ | Minimize roll/pitch rate |
 | `dof_acc_l2` | $-5 \times 10^{-8}$ | $-\sum_j \ddot{q}_j^2$ | Smooth joint motion |
@@ -550,7 +550,7 @@ Activates only near episode end, forcing policy to reach target before timeout. 
 `exploration_velocity_bias_xy` (`rewards.py:195-240`)
 
 $$
-r_{\text{bias}} = \frac{v_{xy} \cdot (x^*_{xy} - x_{xy})}{\|v_{xy}\| \cdot \|x^*_{xy} - x_{xy}\|}
+r_{\text{bias}} = \frac{v_{xy} \cdot (x_{xy}^* - x_{xy})}{\|v_{xy}\| \cdot \|x_{xy}^* - x_{xy}\|}
 $$
 
 Cosine similarity between velocity and direction-to-target.
@@ -568,7 +568,7 @@ Encourages directional movement early in training, deactivates at higher heights
 
 $$
 r_{\text{stall}} = \begin{cases}
--1, & \|v_{xy}\| < 0.1 \text{ and } \|x_{xy} - x^*_{xy}\| > 0.4 \\
+-1, & \|v_{xy}\| < 0.1 \text{ and } \|x_{xy} - x_{xy}^*\| > 0.4 \\
 0, & \text{otherwise}
 \end{cases}
 $$
@@ -631,8 +631,8 @@ Jumping to 1m is too hard from scratch (sparse reward, exploration challenge).
 
 $$
 \begin{aligned}
-\|x_{xy} - x^*_{xy}\| &< 0.30 \text{ m} \\
-|x_z - x^*_z| &< 0.15 \text{ m} \\
+\|x_{xy} - x_{xy}^*\| &< 0.30 \text{ m} \\
+|x_z - x_z^*| &< 0.15 \text{ m} \\
 \text{time\_out} &= \text{True} \\
 \text{base\_contact} &= \text{False} \\
 \text{root\_height\_below\_minimum} &= \text{False} \\
