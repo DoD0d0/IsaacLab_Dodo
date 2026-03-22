@@ -105,10 +105,19 @@ IsaacLab_Dodo/
 
 ## Robot Specification
 
-- **Type:** Bipedal
-- **Control:** Joint position targets (implicit PD: stiffness=40, damping=2)
-- **Initial state:** Base at (0, 0, 0.45), joints at zero
+- **Type:** Bipedal, 8-DOF (4 joints per leg × 2 legs)
+- **Control:** Joint position targets (implicit PD — see task-specific gains below)
+- **Initial state:** Base at (0, 0, 0.45), all joints at 0.0 rad
 - **Asset format:** USD converted from URDF
+
+**PD gains by task:**
+
+| Task | Kp (stiffness) | Kd (damping) | Effort limit | Velocity limit |
+|------|---------------|--------------|--------------|----------------|
+| Walking | 40.0 Nm/rad | 2.0 Nms/rad | — (USD default) | — (USD default) |
+| Box Jump | 80.0 Nm/rad | 4.0 Nms/rad | 40.0 Nm | 50.0 rad/s |
+
+Gains were doubled for the jump task to support more explosive motions. All joints share the same gain (uniform gain, not per-joint).
 
 **Convert URDF to USD:**
 ```bash
@@ -127,19 +136,16 @@ Position control provides a higher-level abstraction that simplifies learning:
 - **Sim-to-real transfer:** Position control abstracts away motor dynamics. Real robot controllers often use position interfaces, reducing sim-to-real gap.
 - **Computational efficiency:** Fewer dimensions to explore in action space compared to full torque control.
 
-**PD parameters (stiffness=40, damping=2):**
-- Tuned for responsive yet stable tracking
-- Higher stiffness → faster response but more oscillation
-- Higher damping → smoother but slower
-- Current values provide good balance for dynamic locomotion
+**PD parameters:**
+- Walking: Kp=40, Kd=2 (no explicit effort/velocity limit)
+- Jump: Kp=80, Kd=4, effort limit=40 Nm, velocity limit=50 rad/s
+- Higher gains for jump: enable stronger corrective torques and faster joint response for explosive takeoff/landing
+- Torque formula: τ = Kp·(q_des − q) + Kd·(0 − q̇), implemented as PhysX ImplicitActuator
 
-**Action scaling (0.45 for jump task):**
-- Raw network output ∈ [-1, 1]
-- Scaled to joint position offsets from default pose
-- Scale factor controls movement range:
-  - Too high → unstable, aggressive motions
-  - Too low → limited expressiveness
-  - 0.45 allows large motions while maintaining stability
+**Action scaling:**
+- Walking: scale=0.5, Jump: scale=0.45
+- Raw network output ∈ [-1, 1] scaled to joint position offsets from default pose
+- Slightly smaller scale for jump: balances control authority vs. stability during fast motions
 
 ---
 
@@ -169,18 +175,23 @@ Trains Dodo to track commanded base velocities (forward/lateral velocity + yaw r
 
 ## Observations
 
-Concatenated vector, ~200-300 dims (depends on terrain).
+Concatenated vector. Dimension depends on terrain variant (N=8 joints):
 
-| Term | Dim | Description |
-|------|-----|-------------|
-| `base_lin_vel` | 3 | Base linear velocity (noisy) |
-| `base_ang_vel` | 3 | Base angular velocity (noisy) |
-| `projected_gravity` | 3 | Gravity in robot frame |
-| `velocity_commands` | 3 | Target velocities (vx, vy, ωz) |
-| `joint_pos` | N | Joint positions (noisy) |
-| `joint_vel` | N | Joint velocities (noisy) |
-| `actions` | N | Previous action |
-| `height_scan` | ~160 | RayCaster output (rough terrain only) |
+| Term | Dim | Noise | Description |
+|------|-----|-------|-------------|
+| `base_lin_vel` | 3 | ±0.1 m/s | Base linear velocity |
+| `base_ang_vel` | 3 | ±0.2 rad/s | Base angular velocity |
+| `projected_gravity` | 3 | ±0.05 | Gravity in robot frame |
+| `velocity_commands` | 3 | — | Target velocities (vx, vy, ωz) |
+| `joint_pos` | 8 | ±0.01 rad | Joint positions |
+| `joint_vel` | 8 | ±1.5 rad/s | Joint velocities |
+| `actions` | 8 | — | Previous action |
+| `height_scan` | 187 | ±0.1 m | RayCaster output (**rough terrain only, disabled for flat**) |
+
+**Total: ~36 dims (flat terrain) / ~223 dims (rough terrain with height scan)**
+
+Height scan grid: 1.6m × 1.0m at 0.1m resolution = 17×11 = **187 rays**.
+Flat terrain training uses no height scanner — scanner is explicitly disabled in `flat_env_cfg.py`.
 
 Noise applied during training, disabled during eval.
 
@@ -256,7 +267,7 @@ Rough terrain variant uses procedural terrain generation and height scanning for
 
 **Key differences from flat:**
 - Terrain generator creates varied surfaces (inherited from parent config)
-- Height scanner provides ~160-dim local terrain map
+- Height scanner provides 187-dim local terrain map (17×11 grid, 1.6×1.0m @ 0.1m res)
 - Terrain curriculum progressively increases difficulty
 - Adjusted reward weights for terrain contact patterns
 
@@ -271,9 +282,18 @@ Rough terrain variant uses procedural terrain generation and height scanning for
 |-----------|-------|
 | `actor_hidden_dims` | [256, 128, 128] |
 | `critic_hidden_dims` | [256, 128, 128] |
+| `init_noise_std` | 0.7 |
 | `learning_rate` | 1e-3 |
-| `entropy_coef` | 0.008 |
+| `entropy_coef` | 0.004 |
+| `clip_param` | 0.2 |
+| `num_learning_epochs` | 5 |
+| `num_mini_batches` | 4 |
+| `gamma` | 0.99 |
+| `lam` | 0.95 |
+| `max_grad_norm` | 1.0 |
+| `empirical_normalization` | False |
 | `max_iterations` | 1500 |
+| `num_steps_per_env` | 96 |
 
 ## Training
 
@@ -332,7 +352,7 @@ Trains Dodo to jump onto a box and reach a 3D target above it. Box height increa
 - Flat plane with kinematic box (1.5m × 1.5m × 1.0m)
 - Target: box top + 0.6m z-offset
 - Action: Joint position targets (scale=0.45)
-- Observation: ~330-dim vector
+- Observation: ~218-dim vector (3+3+1+8+8+8+187)
 
 ### Task Formulation
 
@@ -342,8 +362,13 @@ Trains Dodo to jump onto a box and reach a 3D target above it. Box height increa
 - Reward: Task window (w=200) + exploration bias (w=1) + stall penalty (w=3) + smoothness penalties
 - Episode: 8s max, early termination on falls
 
-**Curriculum:**
-- Box height: $h_{\text{start}} + \text{level} \times 0.03$ m
+**Curriculum (step size history):**
+| Training phase | Step size | Notes |
+|---|---|---|
+| Initial exploration | 0.10 m | Fast progression before jump emerged |
+| After basic jump emerged | 0.05 m | Slowed at jump success (~model_800, box_top=0.25m) |
+| Final refinement | **0.03 m** | Current setting, precision improvement |
+
 - Target: box top + 0.6m margin
 - Advances after 30 consecutive clean successes
 
@@ -408,7 +433,7 @@ Side view:
         ▼
  ┌──────────────┐
  │  Ray grid    │ 1.6m × 1.0m @ 0.1m res
- │ (+0.25m fwd) │ ~160 rays
+ │ (+0.25m fwd) │ 187 rays (17×11)
  └──────────────┘
         │
 ────────┼──────── Ground
@@ -425,7 +450,7 @@ Side view:
 2. Offset by -19.5m (rays start at +20m)
 3. Clip to [-1, 1], scale by 2 → range [-2, 2]m
 4. Add noise: Uniform[-0.1, 0.1]
-5. Output: ~160 values
+5. Output: **187 values** (17×11 grid)
 
 **Why +0.25m forward bias?**
 Box edge appears earlier in scan, giving more prep time.
@@ -434,17 +459,19 @@ Box edge appears earlier in scan, giving more prep time.
 
 ## Observations
 
-~330-dim concatenated vector.
+**218-dim** concatenated vector (3+3+1+8+8+8+187, N=8 joints).
 
-| Term | Dim | Function | Description |
-|------|-----|----------|-------------|
-| `projected_gravity` | 3 | `mdp.projected_gravity` | Gravity in robot frame |
-| `target_pos_b` | 3 | `mdp.command_target_pos_b` | Target in robot base frame |
-| `time_to_go` | 1 | `mdp.command_time_to_go` | Remaining time (seconds) |
-| `joint_pos` | N | `mdp.joint_pos_rel` | Joint positions (noisy) |
-| `joint_vel` | N | `mdp.joint_vel_rel` | Joint velocities (noisy) |
-| `actions` | N | `mdp.last_action` | Previous action |
-| `height_scan` | ~160 | `mdp.height_scan` | RayCaster output |
+| Term | Dim | Noise | Function | Description |
+|------|-----|-------|----------|-------------|
+| `projected_gravity` | 3 | ±0.05 | `mdp.projected_gravity` | Gravity in robot frame |
+| `target_pos_b` | 3 | — | `mdp.command_target_pos_b` | Target in robot base frame |
+| `time_to_go` | 1 | — | `mdp.command_time_to_go` | Remaining episode time (s) |
+| `joint_pos` | 8 | ±0.01 rad | `mdp.joint_pos_rel` | Joint positions |
+| `joint_vel` | 8 | ±1.5 rad/s | `mdp.joint_vel_rel` | Joint velocities |
+| `actions` | 8 | — | `mdp.last_action` | Previous action |
+| `height_scan` | 187 | ±0.1 m | `mdp.height_scan` | RayCaster (17×11 grid, scale×2) |
+
+**vs. walking (flat):** base_lin_vel, base_ang_vel, velocity_commands removed → target_pos_b, time_to_go added. Height scan kept but with forward offset (+0.25m) and scale×2.
 
 Noise applied during training for robustness, disabled during eval.
 
@@ -543,7 +570,7 @@ $$
 - $T_r$: reward window (curriculum-scheduled, currently 40s = always active)
 - $t$: current time
 
-Activates only near episode end, forcing policy to reach target before timeout. Inverse squared error: smooth gradients near target, heavy penalty far away.
+**Note:** The reward window is set to $T_r = 40\text{s}$, which exceeds the episode length of $T = 8\text{s}$. Therefore the condition $t > T - T_r = -32\text{s}$ is always satisfied, making this reward **active throughout the entire episode** (dense reward). This design choice was deliberate: at the current training stage, keeping the window always open ensures the task signal is never zero, which stabilizes early learning. The $T_r$ parameter can be reduced in future stages to enforce a stricter end-of-episode requirement. Inverse squared error provides smooth gradients near the target and a finite penalty far away.
 
 #### 2. Exploration Bias (w=1.0)
 
@@ -572,6 +599,8 @@ r_{\text{stall}} = \begin{cases}
 0, & \text{otherwise}
 \end{cases}
 $$
+
+**Note on weight sign:** The function itself returns $-1$ when active and $0$ otherwise. With weight $w=3$, the actual contribution to the total reward is $3 \times (-1) = -3$. The positive weight value in the config is intentional — the reward function encodes the sign internally.
 
 Prevents crouching near target without jumping (observed local optimum).
 
