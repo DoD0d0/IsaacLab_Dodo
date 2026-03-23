@@ -365,9 +365,8 @@ Trains Dodo to jump onto a box and reach a 3D target above it. Box height increa
 **Curriculum (step size history):**
 | Training phase | Step size | Notes |
 |---|---|---|
-| Initial exploration | 0.10 m | Fast progression before jump emerged |
-| After basic jump emerged | 0.05 m | Slowed at jump success (~model_800, box_top=0.25m) |
-| Final refinement | **0.03 m** | Current setting, precision improvement |
+| Initial training | 0.05 m | 0.1m was too fast (curriculum advanced before jump emerged) |
+| Final refinement | **0.03 m** | Current setting; slowed after jump success (~model_800, box_top=0.25m) |
 
 - Target: box top + 0.6m margin
 - Advances after 30 consecutive clean successes
